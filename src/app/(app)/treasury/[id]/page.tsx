@@ -70,7 +70,7 @@ export default function TreasuryProposalDetailPage() {
   const { executeTreasuryProposal, isPending: isExecuting } = useExecuteTreasuryProposal()
   const { commitVote, isPending: isCommitting } = useCommitVote()
   const { revealVote, isPending: isRevealing } = useRevealVote()
-  const { isPaused } = useDAOStats()
+  const { isPaused, treasuryBalance, refetch: refetchStats } = useDAOStats()
   const { cid: documentCid } = useProposalDocument('Treasury', proposalId)
 
   const [showCommitDialog, setShowCommitDialog] = useState(false)
@@ -231,12 +231,17 @@ export default function TreasuryProposalDetailPage() {
     )
   }
 
+  // True when the treasury cannot cover the requested amount — the execute call
+  // would fail on-chain with InsufficientTreasury in that case.
+  const isTreasuryShort = !!proposal && treasuryBalance < proposal.amount
+
   // Permissionless completion of a withdrawal approved while the treasury was
   // short. Failures are surfaced by the write hook's toast.
   const handleExecute = async () => {
     try {
       await executeTreasuryProposal(proposalId)
       refetch()
+      refetchStats()
     } catch {
       /* reported by useWriteAction */
     }
@@ -279,10 +284,22 @@ export default function TreasuryProposalDetailPage() {
             </CardDescription>
           </CardHeader>
           {isMember && (
-            <CardContent>
-              <Button onClick={handleExecute} disabled={isExecuting || isPaused}>
+            <CardContent className="space-y-2">
+              <Button
+                onClick={handleExecute}
+                disabled={isExecuting || isPaused || isTreasuryShort}
+              >
                 {isExecuting ? 'Executing…' : 'Execute'}
               </Button>
+              {isTreasuryShort && (
+                <p className="text-xs text-muted-foreground">
+                  Treasury balance is below the requested amount — execution will succeed once the
+                  treasury is topped up.
+                </p>
+              )}
+              {isPaused && !isTreasuryShort && (
+                <p className="text-xs text-muted-foreground">Execution is unavailable while the DAO is paused.</p>
+              )}
             </CardContent>
           )}
         </Card>
